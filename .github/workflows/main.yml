@@ -1,0 +1,23 @@
+name: Ubuntu-Build
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Install GCC, CMake, Latex
+      run: sudo apt-get install build-essential cmake texlive-base
+
+    - name: Configure CMake
+      run: mkdir build && cmake -Bbuild -DBUILD_DOC=ON
+
+    - name: Build project
+      run: make -C build
