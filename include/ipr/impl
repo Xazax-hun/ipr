@@ -216,7 +216,7 @@ namespace ipr {
          Arg_type operand() const final { return rep; }
       };
 
-      // Short for the impplementation of generic unary nodes.
+      // Shorthand for the implementation of generic unary nodes.
       template<typename T>
       using Unary_node = Unary<Node<T>>;
 
@@ -253,7 +253,7 @@ namespace ipr {
          Arg2_type second() const final { return rep.second; }
       };
 
-      // Short hand for implementation of geeric binary nodes.
+      // Short hand for implementation of generic binary nodes.
       template<typename T>
       using Binary_node = Binary<Node<T>>;
 
@@ -1074,16 +1074,22 @@ namespace ipr {
 
       using Comment = Unary_node<Comment>;
 
+      using Identifier = Unary_node<ipr::Identifier>;
+      using Suffix = Unary_node<ipr::Suffix>;
+      using Operator = Unary_node<ipr::Operator>;
+      using Conversion = Unary_node<ipr::Conversion>;
+      using Ctor_name = Unary_node<ipr::Ctor_name>;
+      using Dtor_name = Unary_node<ipr::Dtor_name>;
+      using Guide_name = Unary_node<ipr::Guide_name>;
+      using Type_id = Unary_node<ipr::Type_id>;
+
       using Phantom = Expr<ipr::Phantom>;
 
       using Address = Classic_unary_expr<ipr::Address>;
       using Array_delete = Classic_unary_expr<ipr::Array_delete>;
       using Complement = Classic_unary_expr<ipr::Complement>;
-      using Conversion = Unary_expr<ipr::Conversion>;
-      using Ctor_name = Unary_expr<ipr::Ctor_name>;
       using Delete = Classic_unary_expr<ipr::Delete>;
       using Deref = Classic_unary_expr<ipr::Deref>;
-      using Dtor_name = Unary_expr<ipr::Dtor_name>;
 
       struct Expr_list : impl::Node<ipr::Expr_list> {
          typed_sequence<ref_sequence<ipr::Expr>> seq;
@@ -1105,19 +1111,17 @@ namespace ipr {
       using Initializer_list = Classic_unary_expr<ipr::Initializer_list>;
       using Sizeof = Unary_expr<ipr::Sizeof>;
       using Typeid = Unary_expr<ipr::Typeid>;
-      using Identifier = Unary_expr<ipr::Identifier>;
 
       struct Id_expr : Unary_expr<ipr::Id_expr> {
-         const ipr::Decl* decl;
+         const ipr::Expr* decls = nullptr;
 
          explicit Id_expr(const ipr::Name&);
          const ipr::Type& type() const final;
-         const ipr::Decl& resolution() const final;
+         Optional<ipr::Expr> resolution() const final;
       };
 
       using Not = Classic_unary_expr<ipr::Not>;
 
-      using Operator = Unary_expr<ipr::Operator>;
       using Paren_expr = type_from_operand<Classic<Node<ipr::Paren_expr>>>;
       
       using Pre_decrement = Classic_unary_expr<ipr::Pre_decrement>;
@@ -1125,7 +1129,6 @@ namespace ipr {
       using Post_decrement = Classic_unary_expr<ipr::Post_decrement>;
       using Post_increment = Classic_unary_expr<ipr::Post_increment>;
       using Throw = Classic_unary_expr<ipr::Throw>;
-      using Type_id = type_from_operand<Node<ipr::Type_id>>;
 
       using Unary_minus = Classic_unary_expr<ipr::Unary_minus>;
       using Unary_plus = Classic_unary_expr<ipr::Unary_plus>;
@@ -1191,9 +1194,9 @@ namespace ipr {
       using Reinterpret_cast = Conversion_expr<ipr::Reinterpret_cast>;
       using Rshift = Classic_binary_expr<ipr::Rshift>;
       using Rshift_assign = Classic_binary_expr<ipr::Rshift_assign>;
-      using Scope_ref = Binary_expr<ipr::Scope_ref>;
+      using Scope_ref = Classic_binary_expr<ipr::Scope_ref>;
       using Static_cast = Conversion_expr<ipr::Static_cast>;
-      using Template_id = Binary_expr<ipr::Template_id>;
+      using Template_id = Binary_node<ipr::Template_id>;
 
       using Conditional = Ternary<Classic<Expr<ipr::Conditional>>>;
 
@@ -1235,10 +1238,14 @@ namespace ipr {
          Identifier* make_identifier(const char*);
          Identifier* make_identifier(const std::string&);
 
+         Suffix* make_suffix(const ipr::Identifier&);
+
          // Builds an IPR object for an operator name.
          Operator* make_operator(const ipr::String&);
          Operator* make_operator(const char*);
          Operator* make_operator(const std::string&);
+
+         Guide_name* make_guide_name(const ipr::Named_map&);
 
          Address* make_address(const ipr::Expr&);
          Array_delete* make_array_delete(const ipr::Expr&);
@@ -1335,11 +1342,12 @@ namespace ipr {
          util::rb_tree::container<impl::Ctor_name> ctors;
          util::rb_tree::container<impl::Dtor_name> dtors;
          util::rb_tree::container<impl::Identifier> ids;
+         util::rb_tree::container<impl::Suffix> suffixes;
          util::rb_tree::container<impl::Literal> lits;
          util::rb_tree::container<impl::Operator> ops;
+         util::rb_tree::container<impl::Guide_name> guide_ids;
          util::rb_tree::container<impl::Rname> rnames;
-         util::rb_tree::container<impl::Scope_ref> scope_refs;
-         util::rb_tree::container<Template_id> template_ids;
+         util::rb_tree::container<impl::Template_id> template_ids;
          util::rb_tree::container<impl::Type_id> type_ids;
          util::rb_tree::container<impl::Sizeof> sizeofs;
          util::rb_tree::container<impl::Typeid> xtypeids;
@@ -1366,6 +1374,7 @@ namespace ipr {
          stable_farm<impl::Unary_plus> unary_pluses;
          stable_farm<impl::Expansion> expansions;
 
+         stable_farm<impl::Scope_ref> scope_refs;
          stable_farm<impl::And> ands;
          stable_farm<impl::Array_ref> array_refs;
          stable_farm<impl::Arrow> arrows;
@@ -1962,7 +1971,7 @@ namespace ipr {
       struct stmt_factory : expr_factory {
          impl::Break* make_break();
          impl::Continue* make_continue();
-         impl::Empty_stmt* make_empty_stmt();
+         impl::Empty_stmt* make_empty_stmt(const ipr::Type&);
          impl::Block* make_block(const ipr::Region&, const ipr::Type&);
          impl::Ctor_body* make_ctor_body(const ipr::Expr_list&,
                                          const ipr::Block&);
@@ -2015,7 +2024,7 @@ namespace ipr {
                : impl::Expr<T>(&t), id(n), link(l) { }
 
          const ipr::Name& name() const { return id; }
-         Arg1_type first() const { return id; }
+         Arg1_type first() const { return *this; }
          Arg2_type second() const { return link; }
 
       private:
@@ -2035,6 +2044,8 @@ namespace ipr {
          const ipr::Identifier& get_identifier(const char*);
          const ipr::Identifier& get_identifier(const std::string&);
          const ipr::Identifier& get_identifier(const ipr::String&);
+
+         const ipr::Suffix& get_suffix(const ipr::Identifier&);
          
          const ipr::Operator& get_operator(const char*);
          const ipr::Operator& get_operator(const std::string&);
@@ -2044,9 +2055,6 @@ namespace ipr {
          const ipr::Dtor_name& get_dtor_name(const ipr::Type&);
 
          const ipr::Conversion& get_conversion(const ipr::Type&);
-
-         const ipr::Scope_ref& get_scope_ref(const ipr::Expr&,
-                                             const ipr::Expr&);
 
          const ipr::Template_id& get_template_id(const ipr::Name&,
                                                  const ipr::Expr_list&);

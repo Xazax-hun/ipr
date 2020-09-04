@@ -1,9 +1,19 @@
 cmake_minimum_required(
-   VERSION 3.5
+   VERSION 3.9
 )
 
 option(BUILD_DOC
    "Build LaTeX documentation"
+   OFF
+)
+
+option(BUILD_TESTING
+   "Build the tests. Requires GTest."
+   OFF
+)
+
+option(DOWNLOAD_GTEST
+  "Force downloading GTest instead of using a local copy."
    OFF
 )
 
@@ -70,3 +80,34 @@ if(BUILD_DOC)
    include(cmake/UseLATEX.cmake)
    add_subdirectory(doc)
 endif()
+
+if(BUILD_TESTING)
+   enable_testing()
+
+   find_package(GTest)
+
+   # Download GTest if not found or forced.
+   if(NOT GTest_FOUND OR DOWNLOAD_GTEST)
+      message(STATUS "Downloading and building GTest.")
+      configure_file(cmake/External_GTest.cmake gtest/CMakeLists.txt)
+      execute_process(COMMAND "${CMAKE_COMMAND}" -G "${CMAKE_GENERATOR}" .
+         WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/gtest"
+         OUTPUT_QUIET
+      )
+      execute_process(COMMAND "${CMAKE_COMMAND}" --build .
+         WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/gtest"
+         OUTPUT_QUIET
+      )
+      set(GTEST_ROOT ${CMAKE_BINARY_DIR}/gtest)
+      find_package(GTest REQUIRED)
+   endif()
+
+   if(NOT GTest_FOUND)
+      message(FATAL_ERROR "GTest could not be found or built.")
+   endif()
+
+   include(GoogleTest)
+
+   add_subdirectory(tests)
+endif()
+

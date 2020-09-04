@@ -98,13 +98,14 @@ namespace ipr {
    // -- results of name constructor constants --
    // ------------------------------------------
    struct Identifier;            // identifier                          foo
+   struct Suffix;                // Literal operator suffix       "Plato"sv
    struct Operator;              // C++ operator name             operator+
    struct Conversion;            // conversion function name   operator int
-   struct Scope_ref;             // qualified name                     s::m
    struct Template_id;           // C++ template-id                  S<int>
    struct Type_id;               // C++ type-id                  const int*
    struct Ctor_name;             // constructor name                   T::T
    struct Dtor_name;             // destructor name                   T::~T
+   struct Guide_name;            // deduction guide name
    struct Rname;                 // de Bruijn (index, position),
                                  // find better name
 
@@ -707,23 +708,19 @@ namespace ipr {
    // i.e. whose meaning depends on binding contexts (Scopes).
    // That definition accounts for the following (in the standard C++ sense)
    //    - unqualified-id                    -- Identifier
-   //    - qualified-id                      -- Scope_ref
    //    - operator-function-id              -- Operator
    //    - conversion-function-id            -- Conversion
    //    - template-id                       -- Template_id
    //    - type-id                           -- Type_id
    // 
    // Most names are introduced by declarations into scope.
-   // A Name is an Expression.  That obviates the needs for a
-   // special node to turn names into Expressions, for the purpose
-   // of symbolic interpretation.   
-   struct Name : Expr {
+   struct Name : Node {
       // At the moment, this class is empty because there is no
       // interesting operation that could be provided here without
       // imposing too much of implementation details.
 
    protected:
-      Name(Category_code c) : Expr(c)
+      Name(Category_code c) : Node{ c }
       { }
    };
 
@@ -733,6 +730,13 @@ namespace ipr {
    struct Identifier : Unary<Category<identifier_cat, Name>, const String&> {
       // The character sequence of this identifier
       Arg_type string() const { return operand(); }
+   };
+
+                                // -- Suffix --
+   // The suffix of a user-defined literal is essential just an identifier
+   // with a distinguished interpretation.
+   struct Suffix : Unary<Category<suffix_cat, Name>, const Identifier&> {
+      Arg_type name() const { return operand(); }
    };
 
                                 // -- Operator --
@@ -751,13 +755,6 @@ namespace ipr {
    struct Conversion : Unary<Category<conversion_cat, Name>, const Type&> {
       // The type this conversion-function converts values to.
       Arg_type target() const { return operand(); }
-   };
-
-                                // -- Scope_ref --
-   // A qualified name of the form "scope::member".
-   struct Scope_ref : Binary<Category<scope_ref_cat, Name>> {
-      Arg1_type scope() const  { return first(); }
-      Arg2_type member() const { return second(); }
    };
 
                                 // -- Template_id --
@@ -790,6 +787,17 @@ namespace ipr {
    // is a type.
    struct Dtor_name : Unary<Category<dtor_name_cat, Name>, const Type&> {
       Arg_type object_type() const { return operand(); }
+   };
+                                // -- Guide_name --
+   // This interface class represents the name of a deduction guide.
+   // Deduction guides do not have names in Standard C++, and they cannot
+   // be found by name lookup.  Yet, they are entities (like templates)
+   // that generate compiler-internal instructions (their initializers)
+   // that when executed yield deduced template arguments.  As such, they
+   // fit the IPR model of a declaration being an introduction of a name
+   // in a scope, with a type and optional initializer.
+   struct Guide_name : Unary<Category<guide_name_cat, Name>, const Named_map&> {
+      Arg_type mapping_decl() const { return operand(); }
    };
 
                                 // -- Rname --
@@ -1186,13 +1194,18 @@ namespace ipr {
 
                                 // -- Typeid --
    // typeid-expression -- "typeid (expr)", or "typeid (int)"
-   struct Typeid : Unary<Category<typeid_cat>> { };
+   struct Typeid : Unary<Category<typeid_cat>> { }; 
 
                                 // -- Id_expr --
    // This node represents use of a name to designate an entity.
-   // FIXME: Explain how useful this is and when it is used.
-   struct Id_expr : Unary<Category<id_expr_cat, Name>, const Name&> {
-      virtual const Decl& resolution() const = 0;
+   // In general, names are introduced by a declaration.  In a well-formed
+   // fully elaborated program, a use of name refers to exactly one declaration.
+   // However, in a partially elaborated program (e.g. a template definition)
+   // a dependent name may refer to zero, one, or many (overloaded) declarations.
+   struct Id_expr : Unary<Category<id_expr_cat, Expr>, const Name&> {
+      // The set of declarations the name refers to, at the elaboration point.
+      virtual Optional<Expr> resolution() const = 0;
+
       Arg_type name() const { return operand(); }
    };
 
@@ -1266,6 +1279,18 @@ namespace ipr {
       // necessary to make it a single indirection.
 
       const Expr& expr() const { return this->second(); }
+   };
+
+                                // -- Scope_ref --
+   // A qualified name of the form "scope::member".
+   // Although the scope resolution operator ('::') in this expression
+   // cannot be overloaded in standard C++ (yet), it is conceptually
+   // dual to the dot operator, for which overloading has been
+   // suggested multiple time with an operational model.  Consequently,
+   // a qualified name is modelled as a classic expression.
+   struct Scope_ref : Binary<Category<scope_ref_cat, Classic>> {
+      Arg1_type scope() const  { return first(); }
+      Arg2_type member() const { return second(); }
    };
 
                                 // -- Plus --
@@ -2017,15 +2042,16 @@ namespace ipr {
       virtual void visit(const Expr&) = 0;
       virtual void visit(const Classic&);
       
-      virtual void visit(const Name&);
+      virtual void visit(const Name&) = 0;
       virtual void visit(const Identifier&);
+      virtual void visit(const Suffix&);
       virtual void visit(const Operator&);
       virtual void visit(const Conversion&);
-      virtual void visit(const Scope_ref&);
       virtual void visit(const Template_id&);
       virtual void visit(const Type_id&);
       virtual void visit(const Ctor_name&);
       virtual void visit(const Dtor_name&);
+      virtual void visit(const Guide_name&);
       virtual void visit(const Rname&);
 
       virtual void visit(const Type&) = 0;
@@ -2074,6 +2100,7 @@ namespace ipr {
       virtual void visit(const Unary_plus&);
       virtual void visit(const Expansion&);
 
+      virtual void visit(const Scope_ref&);
       virtual void visit(const And&); 
       virtual void visit(const Array_ref&);
       virtual void visit(const Arrow&); 

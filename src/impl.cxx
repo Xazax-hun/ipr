@@ -635,8 +635,8 @@ namespace ipr {
       }
 
       impl::Empty_stmt*
-      stmt_factory::make_empty_stmt() {
-         return empty_stmts.make(*make_phantom());
+      stmt_factory::make_empty_stmt(const ipr::Type& t) {
+         return empty_stmts.make(*make_phantom(t));
       }
 
       impl::Block*
@@ -1083,17 +1083,17 @@ namespace ipr {
       // -------------
 
       Id_expr::Id_expr(const ipr::Name& n)
-            : impl::Unary<impl::Expr<ipr::Id_expr>>(n), decl(0)
+            : impl::Unary<impl::Expr<ipr::Id_expr>>(n)
       { }
 
       const ipr::Type&
       Id_expr::type() const {
-         return util::check(decl)->type();
+         return *util::check(constraint);
       }
 
-      const ipr::Decl&
+      Optional<ipr::Expr>
       Id_expr::resolution() const {
-         return *util::check(decl);
+         return { decls };
       }
 
 
@@ -1502,6 +1502,15 @@ namespace ipr {
          return make_identifier(get_string(s));
       }
 
+      impl::Suffix*
+      expr_factory::make_suffix(const ipr::Identifier& s) {
+         return suffixes.insert(s, unary_compare());
+      }
+
+      impl::Guide_name*
+      expr_factory::make_guide_name(const ipr::Named_map& m) {
+         return guide_ids.insert(m, unary_compare());
+      }
 
       impl::Id_expr*
       expr_factory::make_id_expr(const ipr::Name& n) {
@@ -1512,7 +1521,7 @@ namespace ipr {
       expr_factory::make_id_expr(const ipr::Decl& d) {
          impl::Id_expr* x = id_exprs.make(d.name());
          x->constraint = &d.type();
-         x->decl = &d;
+         x->decls = &d;
          return x;
       }
 
@@ -1831,8 +1840,7 @@ namespace ipr {
       impl::Scope_ref*
       expr_factory::make_scope_ref(const ipr::Expr& l, const ipr::Expr& r)
       {
-         using Rep = impl::Scope_ref::Rep;
-         return scope_refs.insert(Rep{ l, r }, binary_compare());
+         return scope_refs.make(l, r);
       }
 
       impl::Rshift*
@@ -2001,10 +2009,12 @@ namespace ipr {
 
       const ipr::Identifier&
       Lexicon::get_identifier(const ipr::String& s) {
-         impl::Identifier* id = expr_factory::make_identifier(s);
-         if (id->constraint == 0)
-            id->constraint = &get_decltype(*id);
-         return *id;
+         return *expr_factory::make_identifier(s);
+      }
+
+      const ipr::Suffix&
+      Lexicon::get_suffix(const ipr::Identifier& id) {
+         return *expr_factory::make_suffix(id);
       }
 
       const ipr::Type& Lexicon::void_type() const {  return voidtype;  }
@@ -2068,18 +2078,12 @@ namespace ipr {
 
       const ipr::Ctor_name&
       Lexicon::get_ctor_name(const ipr::Type& t) {
-         impl::Ctor_name* id = expr_factory::make_ctor_name(t);
-         if (id->constraint == 0)
-            id->constraint = &get_decltype(*id);
-         return *id;
+         return *expr_factory::make_ctor_name(t);
       }
 
       const ipr::Dtor_name&
       Lexicon::get_dtor_name(const ipr::Type& t) {
-         impl::Dtor_name* id = expr_factory::make_dtor_name(t);
-         if (id->constraint == 0)
-            id->constraint = &get_decltype(*id);
-         return *id;
+         return *expr_factory::make_dtor_name(t);
       }
 
       const ipr::Operator&
@@ -2094,34 +2098,17 @@ namespace ipr {
 
       const ipr::Operator&
       Lexicon::get_operator(const ipr::String& s) {
-         impl::Operator* op = expr_factory::make_operator(s);
-         if (op->constraint == 0)
-            op->constraint = &get_decltype(*op);
-         return *op;
+         return *expr_factory::make_operator(s);
       }
 
       const ipr::Conversion&
       Lexicon::get_conversion(const ipr::Type& t) {
-         impl::Conversion* conv = expr_factory::make_conversion(t);
-         if (conv->constraint == 0)
-            conv->constraint = &get_decltype(*conv);
-         return *conv;
-      }
-
-      const ipr::Scope_ref&
-      Lexicon::get_scope_ref(const ipr::Expr& s, const ipr::Expr& m) {
-         impl::Scope_ref* sr = expr_factory::make_scope_ref(s, m);
-         if (sr->constraint == 0)
-            sr->constraint = &get_decltype(*sr);
-         return *sr;
+         return *expr_factory::make_conversion(t);
       }
 
       const ipr::Template_id&
       Lexicon::get_template_id(const ipr::Name& t, const ipr::Expr_list& a) {
-         impl::Template_id* tid = expr_factory::make_template_id(t, a);
-         if (tid->constraint == 0)
-            tid->constraint = &get_decltype(*tid);
-         return *tid;
+         return *expr_factory::make_template_id(t, a);
       }
 
       const ipr::Array&

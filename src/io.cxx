@@ -18,7 +18,6 @@ namespace ipr
    struct pp_base : Constant_visitor<Missing_overrider> {
       explicit pp_base(Printer& p) : pp(p) { }
       using Visitor::visit;
-      void visit(const Name& n) override { visit(as<Expr>(n)); }
       void visit(const Type& t) override { visit(as<Expr>(t)); }
       void visit(const Decl& d) override { visit(as<Expr>(d)); }
       
@@ -241,7 +240,7 @@ namespace ipr
 
    namespace xpr {
       struct Name : pp_base {
-         Name(Printer& p, const ipr::Decl* d = 0) : pp_base(p), decl(d) { }
+         explicit Name(Printer& p) : pp_base(p) { }
          
          void visit(const Identifier& id) override
          {
@@ -302,8 +301,8 @@ namespace ipr
          //       primary-expression < expression-seq >
          void visit(const Template_id& n) override
          {
-            pp << xpr_primary_expr(n.template_name())
-               << token("<|") << n.args() << token("|>");
+            n.template_name().accept(*this);
+            pp << token("<|") << n.args() << token("|>");
          }
          
          // -- ctor-name:
@@ -337,23 +336,19 @@ namespace ipr
                << rn.position()
                << token(')');
          }
-         
-         const ipr::Decl* decl;
       };
    }
    
    struct xpr_name {
       const Name& name;
-      const Decl* decl;
-      explicit xpr_name(const Name& n) : name(n), decl(0) { }
-      explicit xpr_name(const Name& n, const Decl& d) : name(n), decl(&d) { }
-      explicit xpr_name(const Decl& d) : name(d.name()), decl(&d) { }
+      explicit xpr_name(const Name& n) : name(n) { }
+      explicit xpr_name(const Decl& d) : name(d.name()) { }
    };
    
    static inline Printer&
    operator<<(Printer& printer, xpr_name x)
    {
-      xpr::Name pp(printer, x.decl);
+      xpr::Name pp { printer };
       x.name.accept(pp);
       return printer;
    }
@@ -370,7 +365,7 @@ namespace ipr
          Primary_expr(Printer& pp) : xpr::Name(pp) { }
          
          void visit(const Label& l) override { xpr::Name::visit(l.name()); }
-         void visit(const Id_expr& id) override { pp << xpr_name(id.name(), id.resolution()); }
+         void visit(const Id_expr& id) override { pp << xpr_name{ id.name() }; }
          void visit(const Literal&) override;
          void visit(const As_type& t) override { pp << xpr_primary_expr(t.expr()); }
          void visit(const Phantom&) override { } // nothing to print
